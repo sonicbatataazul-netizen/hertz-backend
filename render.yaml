@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: hertz-backend
+    runtime: node
+    buildCommand: npm install && pip install yt-dlp
+    startCommand: node server.js
+    envVars:
+      - key: HERTZ_API_KEY
+        generateValue: true
