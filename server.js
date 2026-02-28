@@ -64,7 +64,6 @@ app.get("/stream-url", (req, res) => {
 
   const args = [
     `https://www.youtube.com/watch?v=${videoId}`,
-    "-f", "bestaudio",
     "--get-url", "--no-warnings", "--no-check-certificates",
     ...cookieArgs(),
   ];
