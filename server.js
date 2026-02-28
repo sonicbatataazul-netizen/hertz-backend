@@ -1,6 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-const { execFile } = require("child_process");
+const { execFile, exec } = require("child_process");
 
 const app = express();
 app.use(cors());
@@ -11,13 +11,12 @@ const API_KEY = process.env.HERTZ_API_KEY || null;
 
 // Middleware de autenticação
 app.use((req, res, next) => {
-  if (!API_KEY) return next(); // sem chave configurada, libera tudo (dev local)
+  if (!API_KEY) return next();
   const key = req.headers["x-api-key"] || req.query.key;
   if (key !== API_KEY) return res.status(401).json({ error: "Não autorizado" });
   next();
 });
 
-// Health check (sem auth) — necessário pro Render não dormir via ping
 app.get("/health", (_, res) => res.json({ status: "ok" }));
 
 // Busca músicas
@@ -30,9 +29,10 @@ app.get("/search", (req, res) => {
     "--dump-json",
     "--flat-playlist",
     "--no-warnings",
+    "--extractor-args", "youtube:skip=dash",
   ];
 
-  execFile("yt-dlp", args, { timeout: 20000 }, (err, stdout) => {
+  execFile("yt-dlp", args, { timeout: 25000 }, (err, stdout) => {
     if (err) {
       console.error("Erro na busca:", err.message);
       return res.status(500).json({ error: "Erro ao buscar músicas" });
@@ -62,22 +62,30 @@ app.get("/stream-url", (req, res) => {
 
   const args = [
     `https://www.youtube.com/watch?v=${videoId}`,
-    "-f", "bestaudio[ext=webm]/bestaudio/best",
+    "-f", "bestaudio/best",
     "--get-url",
     "--no-warnings",
+    "--extractor-args", "youtube:skip=dash",
+    "--no-check-certificates",
+    "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
   ];
 
-  execFile("yt-dlp", args, { timeout: 25000 }, (err, stdout) => {
+  execFile("yt-dlp", args, { timeout: 30000 }, (err, stdout) => {
     if (err) {
       console.error("Erro stream-url:", err.message);
       return res.status(500).json({ error: "Erro ao obter URL de stream" });
     }
-    res.json({ streamUrl: stdout.trim().split("\n")[0] });
+    const streamUrl = stdout.trim().split("\n")[0];
+    if (!streamUrl) return res.status(500).json({ error: "URL vazia" });
+    res.json({ streamUrl });
   });
 });
 
 app.listen(PORT, () => {
   console.log(`✅ Hertz backend rodando na porta ${PORT}`);
-  if (API_KEY) console.log("🔒 Proteção por API key ativada");
-  else console.log("⚠️  Sem API key — acesso livre (modo dev)");
+  // Atualiza yt-dlp em background ao iniciar
+  exec("pip install -U yt-dlp", (err) => {
+    if (err) console.error("Erro ao atualizar yt-dlp:", err.message);
+    else console.log("✅ yt-dlp atualizado!");
+  });
 });
