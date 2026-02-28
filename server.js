@@ -1,6 +1,9 @@
 const express = require("express");
 const cors = require("cors");
 const { execFile, exec } = require("child_process");
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
 
 const app = express();
 app.use(cors());
@@ -8,6 +11,19 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3001;
 const API_KEY = process.env.HERTZ_API_KEY || null;
+
+// Escreve cookies do env para arquivo temporário
+let COOKIES_FILE = null;
+if (process.env.YT_COOKIES_B64) {
+  try {
+    const content = Buffer.from(process.env.YT_COOKIES_B64, "base64").toString("utf-8");
+    COOKIES_FILE = path.join(os.tmpdir(), "yt_cookies.txt");
+    fs.writeFileSync(COOKIES_FILE, content);
+    console.log("✅ Cookies do YouTube carregados!");
+  } catch (e) {
+    console.error("Erro ao carregar cookies:", e.message);
+  }
+}
 
 // Middleware de autenticação
 app.use((req, res, next) => {
@@ -19,6 +35,10 @@ app.use((req, res, next) => {
 
 app.get("/health", (_, res) => res.json({ status: "ok" }));
 
+function getCookiesArgs() {
+  return COOKIES_FILE ? ["--cookies", COOKIES_FILE] : [];
+}
+
 // Busca músicas
 app.get("/search", (req, res) => {
   const query = req.query.q;
@@ -29,7 +49,7 @@ app.get("/search", (req, res) => {
     "--dump-json",
     "--flat-playlist",
     "--no-warnings",
-    "--extractor-args", "youtube:skip=dash",
+    ...getCookiesArgs(),
   ];
 
   execFile("yt-dlp", args, { timeout: 25000 }, (err, stdout) => {
@@ -65,9 +85,8 @@ app.get("/stream-url", (req, res) => {
     "-f", "bestaudio/best",
     "--get-url",
     "--no-warnings",
-    "--extractor-args", "youtube:skip=dash",
     "--no-check-certificates",
-    "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    ...getCookiesArgs(),
   ];
 
   execFile("yt-dlp", args, { timeout: 30000 }, (err, stdout) => {
@@ -83,7 +102,6 @@ app.get("/stream-url", (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`✅ Hertz backend rodando na porta ${PORT}`);
-  // Atualiza yt-dlp em background ao iniciar
   exec("pip install -U yt-dlp", (err) => {
     if (err) console.error("Erro ao atualizar yt-dlp:", err.message);
     else console.log("✅ yt-dlp atualizado!");
